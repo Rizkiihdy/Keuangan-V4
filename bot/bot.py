@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import re
-from datetime import time as dt_time, timedelta
+from datetime import time as dt_time, timedelta, datetime
 
 from telegram import Update, BotCommand
 from telegram.ext import (
@@ -31,7 +31,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TELEGRAM_TOKEN  = os.environ.get("TELEGRAM_TOKEN", "8858919060:AAG36quotEXjaiI4VSpZE_iO0Bi4k7e-JPE")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+if not TELEGRAM_TOKEN:
+    raise ValueError("TELEGRAM_TOKEN environment variable is required")
 REGISTRY_FILE   = os.path.join(os.path.dirname(__file__), "user_registry.json")
 
 ai     = GeminiAI()

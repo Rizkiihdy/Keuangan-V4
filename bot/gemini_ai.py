@@ -40,7 +40,7 @@ class GeminiAI:
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY", "")
         if not api_key:
-            api_key = "AQ.Ab8RN6IdPcZxFxQpRqTZIig2iP6htHqJ3cI-3D1NyiyNSYeSmw"
+            raise ValueError("GEMINI_API_KEY environment variable is required")
         self.client = genai.Client(api_key=api_key)
         logger.info("Gemini AI initialized.")
 
