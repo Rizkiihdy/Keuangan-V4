@@ -40,8 +40,7 @@ class GeminiAI:
     def __init__(self):
         api_key = os.environ.get("GEMINI_API_KEY", "")
         if not api_key:
-            # Fallback ke hardcoded (seperti V4)
-            api_key = "AQ.Ab8RN6IhdC8_PGlpPrUFTJFmr87b_zD1BK0m8LUjF_ag59qYxg"
+            api_key = "AQ.Ab8RN6IdPcZxFxQpRqTZIig2iP6htHqJ3cI-3D1NyiyNSYeSmw"
         self.client = genai.Client(api_key=api_key)
         logger.info("Gemini AI initialized.")
 
@@ -78,7 +77,6 @@ class GeminiAI:
         raise QuotaExhaustedError("Semua model Gemini mencapai batas kuota.")
 
     def _generate_vision(self, image_bytes: bytes, mime_type: str, prompt: str) -> str:
-        """Cara V1: inline bytes, gak perlu upload file."""
         parts = [
             genai_types.Part(
                 inline_data=genai_types.Blob(mime_type=mime_type, data=image_bytes)
@@ -119,8 +117,6 @@ class GeminiAI:
         raw = re.sub(r"```$", "", raw).strip()
         return raw
 
-    # ── PARSE TEKS TRANSAKSI ───────────────────────────────────
-
     def parse_transaction(self, text: str) -> dict | None:
         prompt = (
             "Kamu adalah Oliv, asisten keuangan pribadi milik Zee.\n"
@@ -130,9 +126,9 @@ class GeminiAI:
             '  "tipe": "Pengeluaran" atau "Pemasukan",\n'
             '  "jumlah": angka bulat (contoh: "10.000"→10000, "2 juta"→2000000, "50k"→50000),\n'
             f'  "kategori": pilih dari: "{_ALL_CATS}",\n'
-            '  "keterangan": deskripsi singkat dalam bahasa Indonesia (maks 3 kata),\n'
-            '  "akun": nama akun (Cash, BCA, GoPay, ShopeePay, DANA, RDN, Jago, Tabungan, Dana Darurat, Investasi),\n'
-            '  "payee": nama toko/merchant, kalau tidak ada → "-"\n'
+            '  "memo": nama barang/item yang dibeli (maks 3 kata, contoh: "Kopi", "Nasi Padang", "Bensin"),\n'
+            '  "payee": keterangan lengkap transaksi (toko + konteks + alasan, bebas panjang),\n'
+            '  "akun": nama akun (Cash, BCA, GoPay, ShopeePay, DANA, RDN, Jago, Tabungan 27Th, Dana Darurat, Investasi),\n'
             "}\n\n"
             "Panduan kategori:\n"
             "- Makan/minum/kopi/rokok → Makan & Minum\n"
@@ -150,6 +146,10 @@ class GeminiAI:
             "- Bonus/THR → Bonus\n"
             "- Dividen/saham → Dividen\n"
             "- Freelance/jualan → Usaha\n\n"
+            "Panduan memo vs payee:\n"
+            "- memo: NAMA BARANG/ITEM SINGKAT (1-3 kata). Contoh: 'Kopi', 'Nasi Goreng', 'Bensin', 'Oli Motor'\n"
+            "- payee: KETERANGAN LENGKAP. Contoh: 'Kopi Kenangan - meeting client, jalan Thamrin', 'SPBU Pertamina 34.123.07 - isi bensin motor'\n"
+            "- Kalau user bilang 'beli kopi 15rb di kopi kenangan buat meeting' → memo='Kopi', payee='Kopi Kenangan - beli kopi 15rb buat meeting'\n\n"
             "PENTING:\n"
             "- Rokok SELALU 'Makan & Minum'\n"
             "- Transfer antar akun → kategori '[Transfer]'\n"
@@ -162,7 +162,6 @@ class GeminiAI:
             if data.get("tipe") is None:
                 return None
 
-            # Default akun kalau gak disebut
             akun = data.get("akun", "Cash")
             if akun not in DAFTAR_AKUN:
                 akun = "Cash"
@@ -171,17 +170,15 @@ class GeminiAI:
                 "tipe":       str(data["tipe"]),
                 "jumlah":     float(data["jumlah"]),
                 "kategori":   str(data["kategori"]),
-                "keterangan": str(data["keterangan"]),
-                "akun":       akun,
+                "memo":       str(data.get("memo", "-")),
                 "payee":      str(data.get("payee", "-")),
+                "akun":       akun,
             }
         except QuotaExhaustedError:
             raise
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning(f"JSON parse failed: {e} | raw: {raw!r}")
             return None
-
-    # ── PARSE FOTO STRUK ───────────────────────────────────────
 
     def parse_receipt_photo(self, image_bytes: bytes, mime_type: str) -> dict | None:
         prompt = (
@@ -192,9 +189,9 @@ class GeminiAI:
             '  "tipe": "Pengeluaran",\n'
             '  "jumlah": total yang dibayar (angka bulat, tanpa simbol),\n'
             f'  "kategori": pilih dari: "{_EXPENSE_LIST}",\n'
-            '  "keterangan": nama toko atau jenis pembelian (maks 3 kata),\n'
+            '  "memo": nama barang/item utama (maks 3 kata, contoh: "Kopi", "Nasi", "Bensin"),\n'
+            '  "payee": nama toko + keterangan lengkap (bebas panjang),\n'
             '  "items": item utama yang dibeli, pisahkan koma (maks 5 item),\n'
-            '  "payee": nama toko/merchant, kalau tidak jelas → "-",\n'
             '  "akun": deteksi akun dari struk (Cash, GoPay, BCA, dll)\n'
             "}\n\n"
             "Panduan kategori:\n"
@@ -207,6 +204,9 @@ class GeminiAI:
             "- Bioskop/game/rekreasi → Hiburan & Lifestyle\n"
             "- Salon/spa/barbershop → Perawatan Diri\n"
             "- Toko HP/elektronik → Gadget & Elektronik\n\n"
+            "Panduan memo vs payee:\n"
+            "- memo: NAMA BARANG SINGKAT. Contoh: 'Kopi', 'Mie Instan', 'Shampoo'\n"
+            "- payee: NAMA TOKO + KONTEKS. Contoh: 'Indomaret Jl. Sudirman - beli kopi & mie', 'Starbucks Mall Taman Anggrek - meeting client'\n\n"
             "Jika BUKAN struk belanja: {\"tipe\": null}\n\n"
             "PENTING: Kembalikan HANYA JSON, tanpa penjelasan, tanpa ```."
         )
@@ -224,9 +224,9 @@ class GeminiAI:
                 "tipe":       str(data["tipe"]),
                 "jumlah":     float(data["jumlah"]),
                 "kategori":   str(data["kategori"]),
-                "keterangan": str(data["keterangan"]),
-                "items":      str(data.get("items", "")),
+                "memo":       str(data.get("memo", "-")),
                 "payee":      str(data.get("payee", "-")),
+                "items":      str(data.get("items", "")),
                 "akun":       akun,
             }
         except QuotaExhaustedError:
@@ -234,8 +234,6 @@ class GeminiAI:
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning(f"Receipt JSON parse failed: {e} | raw: {raw!r}")
             return None
-
-    # ── GENERATE WEEKLY REPORT ─────────────────────────────────
 
     def generate_weekly_report(self, transactions: list[dict], name: str) -> str:
         if not transactions:
@@ -260,8 +258,6 @@ class GeminiAI:
             f"Gunakan bahasa Indonesia casual, emoji secukupnya, format Markdown (bold angka penting). Maks 280 kata."
         )
         return self._generate(prompt)
-
-    # ── ASK / Q&A ────────────────────────────────────────────────
 
     def ask(self, question: str, transactions: list[dict]) -> str:
         if transactions:

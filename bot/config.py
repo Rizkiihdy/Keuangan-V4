@@ -1,13 +1,13 @@
 BOT_NAME = "Oliv"
 
-# ── TIPE TRANSAKSI ─────────────────────────────────────────────
+# TIPE TRANSAKSI
 TIPE_PEMASUKAN  = "Pemasukan"
 TIPE_PENGELUARAN = "Pengeluaran"
 
-# ── AKUN (10 TOTAL) ────────────────────────────────────────────
+# AKUN (10 TOTAL)
 DAFTAR_AKUN = [
     "Cash", "BCA", "GoPay", "ShopeePay", "DANA",
-    "RDN", "Jago", "Tabungan", "Dana Darurat", "Investasi"
+    "RDN", "Jago", "Tabungan 27Th", "Dana Darurat", "Investasi"
 ]
 
 AKUN_KEYWORDS = {
@@ -17,12 +17,12 @@ AKUN_KEYWORDS = {
     "RDN":       ["rdn"],
     "BCA":       ["bca"],
     "Jago":      ["jago"],
-    "Tabungan":  ["tabungan", "tabung"],
+    "Tabungan 27Th":  ["tabungan", "tabung", "tabungan 27th", "27th"],
     "Dana Darurat": ["dana darurat", "darurat"],
     "Investasi": ["investasi", "invest"],
 }
 
-# ── KATEGORI PENGELUARAN (12) ──────────────────────────────────
+# KATEGORI PENGELUARAN (12)
 EXPENSE_CATEGORIES = [
     "Makan & Minum",
     "Transportasi",
@@ -35,10 +35,10 @@ EXPENSE_CATEGORIES = [
     "Pendidikan",
     "Hadiah & Sosial",
     "Bisnis",
-    "Lainya",
+    "Lain-lain",
 ]
 
-# ── INCOME CATEGORIES (5) ──────────────────────────────────────
+# INCOME CATEGORIES (5)
 INCOME_CATEGORIES = [
     "Gaji",
     "Bonus",
@@ -47,7 +47,7 @@ INCOME_CATEGORIES = [
     "Lain-lain",
 ]
 
-# ── NON-BUDGET CATEGORIES ──────────────────────────────────────
+# NON-BUDGET CATEGORIES
 NON_BUDGET_CATEGORIES = [
     "[Transfer]",
     "[Refund]",
@@ -58,7 +58,7 @@ NON_BUDGET_CATEGORIES = [
 
 ALL_CATEGORIES = EXPENSE_CATEGORIES + INCOME_CATEGORIES + NON_BUDGET_CATEGORIES
 
-# ── EMOJI KATEGORI ─────────────────────────────────────────────
+# EMOJI KATEGORI
 KATEGORI_EMOJI = {
     "Makan & Minum": "🍽️",
     "Transportasi": "🚗",
@@ -71,12 +71,11 @@ KATEGORI_EMOJI = {
     "Pendidikan": "📚",
     "Hadiah & Sosial": "🎁",
     "Bisnis": "💼",
-    "Lainya": "📌",
+    "Lain-lain": "📌",
     "Gaji": "💰",
     "Bonus": "🎉",
     "Dividen": "📈",
     "Usaha": "🏪",
-    "Lain-lain": "📎",
     "[Transfer]": "🔁",
     "[Refund]": "↩️",
     "[piutang]": "🤝",
@@ -84,7 +83,7 @@ KATEGORI_EMOJI = {
     "[Dll]": "📋",
 }
 
-# ── KOMENTAR PERSONAL ──────────────────────────────────────────
+# KOMENTAR PERSONAL
 KOMENTAR_OLIV = {
     "rokok":        ["rokok lagi nih Zee 👀", "hati-hati ya Zee 🌿", "udah berapa batang hari ini? 😄"],
     "kopi":         ["kopi terus Zee ☕", "caffeine mode on 😂", "kopi pagi atau siang nih?"],
@@ -107,10 +106,10 @@ KOMENTAR_OLIV = {
     "bonus":        ["rezeki nomplok! 🎊", "jangan lupa disyukuri ya"],
 }
 
-# ── SHEET HEADERS V4 ───────────────────────────────────────────
-TRANSAKSI_HEADERS = ["Akun", "Tanggal", "Jam", "Payee", "Memo", "Tag", "Category", "Clr", "PAYMENT", "DEPOSIT"]
+# SHEET HEADERS
+TRANSAKSI_HEADERS = ["Akun", "Tanggal", "Num", "Payee", "Memo", "Tag", "Category", "Clr", "PAYMENT", "DEPOSIT"]
 
-# ── FALLBACK KEYWORDS ────────────────────────────────────────────
+# FALLBACK KEYWORDS
 FALLBACK_KEYWORDS = {
     "Makan & Minum": ["makan","minum","kopi","teh","nasi","bakso","mie","soto","ayam",
                       "cafe","resto","restoran","starbucks","kfc","mcdo","pizza","burger",

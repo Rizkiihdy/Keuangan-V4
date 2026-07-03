@@ -1,9 +1,10 @@
 import os
 import json
 import logging
-from datetime import time as dt_time
+import re
+from datetime import time as dt_time, timedelta
 
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     ContextTypes, filters,
@@ -14,6 +15,7 @@ from sheets import (
     filter_operasional, saldo_per_akun, get_summary,
     get_recent, get_week_transactions,
     get_month_expense_for_category, get_anggaran_for_category,
+    now_wib,
 )
 from gemini_ai import GeminiAI, QuotaExhaustedError
 from config import (
@@ -93,6 +95,55 @@ def deteksi_akun(text):
     return "Cash"
 
 
+def parse_transfer_accounts(text):
+    """Parse 'dari X ke Y' atau deteksi 2 akun dari text"""
+    text_lower = text.lower()
+
+    # Pattern 1: "dari [akun] ke [akun]"
+    match = re.search(r'dari\s+(\w+(?:\s+\w+)?)\s+ke\s+(\w+(?:\s+\w+)?)', text_lower)
+    if match:
+        dari_raw = match.group(1).strip()
+        ke_raw = match.group(2).strip()
+
+        dari = _map_to_akun(dari_raw)
+        ke = _map_to_akun(ke_raw)
+        if dari and ke:
+            return dari, ke
+
+    # Pattern 2: "ke [akun] dari [akun]"
+    match = re.search(r'ke\s+(\w+(?:\s+\w+)?)\s+dari\s+(\w+(?:\s+\w+)?)', text_lower)
+    if match:
+        ke = _map_to_akun(match.group(1).strip())
+        dari = _map_to_akun(match.group(2).strip())
+        if dari and ke:
+            return dari, ke
+
+    # Fallback: cari 2 akun yang disebut
+    found = []
+    for akun in DAFTAR_AKUN:
+        if akun.lower() in text_lower:
+            found.append(akun)
+
+    if len(found) >= 2:
+        return found[0], found[1]
+    elif len(found) == 1:
+        return "Cash", found[0]
+
+    return "Cash", "GoPay"
+
+
+def _map_to_akun(raw_name):
+    """Map nama bebas ke akun valid"""
+    raw_lower = raw_name.lower()
+    for akun in DAFTAR_AKUN:
+        if akun.lower() == raw_lower:
+            return akun
+    for akun, keywords in AKUN_KEYWORDS.items():
+        if any(kw in raw_lower for kw in keywords):
+            return akun
+    return None
+
+
 async def _budget_alert(update, kategori):
     if kategori not in EXPENSE_CATEGORIES:
         return
@@ -120,7 +171,6 @@ async def _budget_alert(update, kategori):
             )
     except Exception as e:
         logger.error(f"Budget alert error: {e}")
-
 
 async def start(update, context):
     user = update.effective_user
@@ -200,12 +250,11 @@ async def handle_free_text(update, context):
         return
 
     if parsed["kategori"] == "[Transfer]":
-        ke_akun = deteksi_akun(text)
-        dari_akun = parsed.get("akun", "Cash")
-        if ke_akun == dari_akun:
+        dari_akun, ke_akun = parse_transfer_accounts(text)
+        if dari_akun == ke_akun:
             ke_akun = "GoPay"
         try:
-            tulis_transfer(dari_akun, ke_akun, int(parsed["jumlah"]), parsed["keterangan"])
+            tulis_transfer(dari_akun, ke_akun, int(parsed["jumlah"]), parsed.get("payee", "Pindah Saldo"))
             await update.message.reply_text(
                 f"🔁 *Transfer Tercatat!*\n"
                 f"*{dari_akun}* → *{ke_akun}*\n"
@@ -222,17 +271,17 @@ async def handle_free_text(update, context):
             tulis_transaksi(
                 akun=parsed.get("akun", "Cash"),
                 payee=parsed.get("payee", "-"),
-                memo=parsed["keterangan"],
+                memo=parsed["memo"],
                 kategori=parsed["kategori"],
                 payment=int(parsed["jumlah"]),
                 deposit="",
             )
             em = emoji_kategori(parsed["kategori"])
-            komentar = komentar_personal(parsed["keterangan"])
+            komentar = komentar_personal(parsed["memo"])
             msg = (
                 f"✅ *Tercatat, {name}!*\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"{em} *{parsed['keterangan'].title()}* — {rp(parsed['jumlah'])}\n"
+                f"{em} *{parsed['memo'].title()}* — {rp(parsed['jumlah'])}\n"
                 f"📂 {parsed['kategori']}  |  🏪 {parsed.get('payee', '-')}  |  💳 {parsed.get('akun', 'Cash')}"
             )
             if komentar:
@@ -242,8 +291,8 @@ async def handle_free_text(update, context):
         else:
             tulis_transaksi(
                 akun=parsed.get("akun", "Cash"),
-                payee="-",
-                memo=parsed["keterangan"],
+                payee=parsed.get("payee", "-"),
+                memo=parsed["memo"],
                 kategori=parsed["kategori"],
                 payment="",
                 deposit=int(parsed["jumlah"]),
@@ -252,7 +301,7 @@ async def handle_free_text(update, context):
                 f"💼 *Pemasukan Tercatat!*\n"
                 f"💰 {rp(parsed['jumlah'])} ke *{parsed.get('akun', 'Cash')}*\n"
                 f"📦 Kategori: {parsed['kategori']}\n"
-                f"📝 Memo: {parsed['keterangan']}\n✅ Cleared",
+                f"📝 Memo: {parsed['memo']}\n✅ Cleared",
                 parse_mode="Markdown",
             )
     except Exception as e:
@@ -294,7 +343,7 @@ async def handle_photo(update, context):
         tulis_transaksi(
             akun=parsed.get("akun", "Cash"),
             payee=parsed.get("payee", "-"),
-            memo=parsed["keterangan"],
+            memo=parsed["memo"],
             kategori=parsed["kategori"],
             payment=int(parsed["jumlah"]),
             deposit="",
@@ -306,11 +355,11 @@ async def handle_photo(update, context):
 
     items_line = f"\n📦 _Item: {parsed['items']}_" if parsed.get("items") else ""
     em = emoji_kategori(parsed["kategori"])
-    komentar = komentar_personal(parsed["keterangan"])
+    komentar = komentar_personal(parsed["memo"])
 
     msg = (
         f"✅ *Struk berhasil di-scan, {name}!*\n\n"
-        f"{em} *{parsed['keterangan'].title()}*\n"
+        f"{em} *{parsed['memo'].title()}*\n"
         f"💰 Total: `{rp(parsed['jumlah'])}`\n"
         f"🏪 Payee: {parsed.get('payee', '-')}\n"
         f"🏷️ Kategori: {parsed['kategori']}"
@@ -323,7 +372,6 @@ async def handle_photo(update, context):
     await update.message.reply_text(msg, parse_mode="Markdown")
     await _budget_alert(update, parsed["kategori"])
 
-
 async def pengeluaran(update, context):
     user = update.effective_user
     name = fname(user)
@@ -334,10 +382,10 @@ async def pengeluaran(update, context):
         cats = ", ".join(EXPENSE_CATEGORIES[:6]) + ", ..."
         await update.message.reply_text(
             f"Cara pakainya, {name}:\n"
-            f"`/pengeluaran <jumlah> <kategori> [keterangan] [akun]`\n\n"
-            f"Contoh: `/pengeluaran 45000 \"Makan & Minum\" makan siang gopay`\n\n"
+            f"`/pengeluaran <jumlah> <kategori> [memo] [payee] [akun]`\n\n"
+            f"Contoh: `/pengeluaran 45000 \"Makan & Minum\" Kopi \"Kopi Kenangan - meeting\" gopay`\n\n"
             f"Kategori: _{cats}_\n"
-            f"Akun: Cash, BCA, GoPay, ShopeePay, DANA, RDN, Jago, Tabungan, Dana Darurat, Investasi\n\n"
+            f"Akun: Cash, BCA, GoPay, ShopeePay, DANA, RDN, Jago, Tabungan 27Th, Dana Darurat, Investasi\n\n"
             f"💡 _Atau langsung ketik: \"beli makan 45 ribu\"_\n"
             f"📸 _Atau kirim foto struk!_",
             parse_mode="Markdown",
@@ -349,24 +397,51 @@ async def pengeluaran(update, context):
     except ValueError:
         await update.message.reply_text(
             f"Jumlahnya harus angka ya {name} 😄\n"
-            f"Contoh: `/pengeluaran 45000 \"Makan & Minum\" makan siang`",
+            f"Contoh: `/pengeluaran 45000 \"Makan & Minum\" Kopi \"Kopi Kenangan\"`",
             parse_mode="Markdown",
         )
         return
 
-    kategori   = " ".join(args[1:-1]) if len(args) > 2 else args[1]
-    keterangan = args[-1] if len(args) > 2 else "-"
+    kategori = None
+    memo = "-"
+    payee = "-"
     akun = "Cash"
-    for a in DAFTAR_AKUN:
-        if a.lower() in [arg.lower() for arg in args]:
-            akun = a
-            break
+
+    if args[1] in EXPENSE_CATEGORIES or args[1] in INCOME_CATEGORIES:
+        kategori = args[1]
+        remaining = args[2:]
+    else:
+        for i in range(1, len(args)):
+            cat_candidate = " ".join(args[1:i+1])
+            if cat_candidate in EXPENSE_CATEGORIES or cat_candidate in INCOME_CATEGORIES:
+                kategori = cat_candidate
+                remaining = args[i+1:]
+                break
+
+    if not kategori:
+        await update.message.reply_text(f"Kategori nggak ketemu ya {name} 😅 Coba yang ada di daftar!")
+        return
+
+    for arg in remaining:
+        arg_lower = arg.lower()
+        if arg in DAFTAR_AKUN or any(arg_lower == a.lower() for a in DAFTAR_AKUN):
+            akun = arg
+        elif len(arg) > 15 or " " in arg:
+            payee = arg
+        else:
+            memo = arg
+
+    if memo == "-" and remaining:
+        memo = remaining[0]
+    if payee == "-" and len(remaining) > 1:
+        payee = " ".join(remaining[1:])
 
     try:
-        tulis_transaksi(akun, "-", keterangan, kategori, int(jumlah), "")
+        tulis_transaksi(akun, payee, memo, kategori, int(jumlah), "")
         await update.message.reply_text(
-            f"Siap, {name}! Pengeluaran *{rp(jumlah)}* buat *{keterangan}* "
-            f"({kategori}) dari *{akun}* udah {BOT_NAME} catat. 📝✅",
+            f"Siap, {name}! Pengeluaran *{rp(jumlah)}* buat *{memo}* "
+            f"({kategori}) dari *{akun}* udah {BOT_NAME} catat. 📝✅\n"
+            f"🏪 Payee: {payee}",
             parse_mode="Markdown",
         )
         await _budget_alert(update, kategori)
@@ -384,10 +459,10 @@ async def pemasukan(update, context):
     if not args or len(args) < 2:
         await update.message.reply_text(
             f"Cara pakainya, {name}:\n"
-            f"`/pemasukan <jumlah> <kategori> [keterangan] [akun]`\n\n"
-            f"Contoh: `/pemasukan 5000000 Gaji gaji bulan juni bca`\n\n"
+            f"`/pemasukan <jumlah> <kategori> [memo] [payee] [akun]`\n\n"
+            f"Contoh: `/pemasukan 5000000 Gaji Gaji \"Gaji Juni 2026\" bca`\n\n"
             f"Kategori: Gaji, Bonus, Dividen, Usaha, Lain-lain\n"
-            f"Akun: Cash, BCA, GoPay, ShopeePay, DANA, RDN, Jago, Tabungan, Dana Darurat, Investasi\n\n"
+            f"Akun: Cash, BCA, GoPay, ShopeePay, DANA, RDN, Jago, Tabungan 27Th, Dana Darurat, Investasi\n\n"
             f"💡 _Atau langsung ketik: \"gajian 5 juta\"_",
             parse_mode="Markdown",
         )
@@ -399,19 +474,25 @@ async def pemasukan(update, context):
         await update.message.reply_text(f"Jumlahnya harus angka ya {name} 😄")
         return
 
-    kategori   = args[1]
-    keterangan = " ".join(args[2:-1]) if len(args) > 3 else "-"
+    kategori = args[1]
+    memo = "-"
+    payee = "-"
     akun = "Cash"
-    for a in DAFTAR_AKUN:
-        if a.lower() in [arg.lower() for arg in args]:
-            akun = a
-            break
+
+    for arg in args[2:]:
+        if arg in DAFTAR_AKUN:
+            akun = arg
+        elif len(arg) > 15:
+            payee = arg
+        else:
+            memo = arg
 
     try:
-        tulis_transaksi(akun, "-", keterangan, kategori, "", int(jumlah))
+        tulis_transaksi(akun, payee, memo, kategori, "", int(jumlah))
         await update.message.reply_text(
-            f"Yeay, ada pemasukan nih {name}! 🎉 *{rp(jumlah)}* dari *{keterangan}* "
-            f"({kategori}) ke *{akun}* udah {BOT_NAME} catat. 📝✅",
+            f"Yeay, ada pemasukan nih {name}! 🎉 *{rp(jumlah)}* dari *{memo}* "
+            f"({kategori}) ke *{akun}* udah {BOT_NAME} catat. 📝✅\n"
+            f"🏪 Payee: {payee}",
             parse_mode="Markdown",
         )
     except Exception as e:
@@ -488,8 +569,7 @@ async def hariini_cmd(update, context):
     name = fname(update.effective_user)
     _register(update.effective_user, update.effective_chat.id)
 
-    from datetime import datetime
-    hari_ini = datetime.now().strftime("%Y-%m-%d")
+    hari_ini = now_wib().strftime("%Y-%m-%d")
     semua = get_semua_transaksi()
     data = [t for t in filter_operasional(semua) if t["tgl"] == hari_ini and t["payment"] > 0]
 
@@ -519,9 +599,8 @@ async def mingguini_cmd(update, context):
     name = fname(update.effective_user)
     _register(update.effective_user, update.effective_chat.id)
 
-    from datetime import datetime, timedelta
     semua = get_semua_transaksi()
-    hari_ini = datetime.now().date()
+    hari_ini = now_wib().date()
     tujuh_lalu = hari_ini - timedelta(days=6)
     data = []
     for t in filter_operasional(semua):
@@ -564,17 +643,16 @@ async def terbesar_cmd(update, context):
     name = fname(update.effective_user)
     _register(update.effective_user, update.effective_chat.id)
 
-    from datetime import datetime
-    bulan_ini = datetime.now().strftime("%Y-%m")
+    bulan_ini = now_wib().strftime("%Y-%m")
     semua = get_semua_transaksi()
     data = [t for t in filter_operasional(semua) if t["tgl"].startswith(bulan_ini) and t["payment"] > 0]
 
     if not data:
         await update.message.reply_text(f"📭 Belum ada transaksi bulan ini, {name}.")
-    return
+        return
 
     top10 = sorted(data, key=lambda x: -x["payment"])[:10]
-    nama_bulan = datetime.now().strftime("%B %Y")
+    nama_bulan = now_wib().strftime("%B %Y")
     baris = ""
     for i, t in enumerate(top10, 1):
         em = emoji_kategori(t["kategori"])
@@ -594,9 +672,8 @@ async def analisa_cmd(update, context):
     name = fname(update.effective_user)
     _register(update.effective_user, update.effective_chat.id)
 
-    from datetime import datetime
-    bulan_ini = datetime.now().strftime("%Y-%m")
-    nama_bulan = datetime.now().strftime("%B %Y")
+    bulan_ini = now_wib().strftime("%Y-%m")
+    nama_bulan = now_wib().strftime("%B %Y")
     semua = get_semua_transaksi()
     data = [t for t in filter_operasional(semua) if t["tgl"].startswith(bulan_ini) and t["payment"] > 0]
 
@@ -648,12 +725,11 @@ async def budget_cmd(update, context):
                 f"*{cat}* — {status}\n"
                 f"  `{rp(spent)}` / `{rp(budget)}` ({ratio*100:.0f}%)"
             )
-
         if not has_budget:
             await update.message.reply_text(
                 f"Belum ada anggaran yang diatur nih, {name} 📭\n\n"
-                f"Buka tab *Anggaran* di Google Sheet, isi kolom B "
-                f"(Anggaran Bulanan) per kategori dulu ya! 🎯",
+                f"Buka tab *Budget* di Google Sheet, isi kolom bulan ini "
+                f"per kategori dulu ya! 🎯",
                 parse_mode="Markdown",
             )
             return
@@ -665,7 +741,6 @@ async def budget_cmd(update, context):
     except Exception as e:
         logger.error(f"Budget cmd error: {e}")
         await update.message.reply_text(f"Aduh {name}, gagal cek budget nih. Coba lagi ya! 😓")
-
 
 async def terakhir(update, context):
     name = fname(update.effective_user)
@@ -753,11 +828,31 @@ async def _send_weekly_report(context):
             logger.error(f"Weekly report failed for {chat_id_str}: {e}")
 
 
+async def post_init(app):
+    commands = [
+        BotCommand("start", "Mulai bot Oliv"),
+        BotCommand("help", "Bantuan & daftar perintah"),
+        BotCommand("pengeluaran", "Catat pengeluaran manual"),
+        BotCommand("pemasukan", "Catat pemasukan manual"),
+        BotCommand("ringkasan", "Ringkasan keuangan"),
+        BotCommand("saldo", "Cek saldo semua akun"),
+        BotCommand("hariini", "Pengeluaran hari ini"),
+        BotCommand("mingguini", "7 hari terakhir"),
+        BotCommand("terbesar", "Top 10 pengeluaran"),
+        BotCommand("analisa", "Analisa pola keuangan"),
+        BotCommand("budget", "Status budget bulan ini"),
+        BotCommand("terakhir", "10 transaksi terakhir"),
+        BotCommand("tanya", "Tanya Oliv soal keuangan"),
+    ]
+    await app.bot.set_my_commands(commands)
+    logger.info("Bot commands set.")
+
+
 def main():
     if not TELEGRAM_TOKEN:
         raise ValueError("TELEGRAM_TOKEN not set.")
 
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start",        start))
     app.add_handler(CommandHandler("help",         help_cmd))

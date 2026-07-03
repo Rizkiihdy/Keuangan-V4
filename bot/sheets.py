@@ -45,13 +45,48 @@ except Exception as e:
     raise
 
 
+# TIMEZONE & EXCEL DATE FIX (WIB = UTC+7)
+
+WIB_OFFSET = timedelta(hours=7)
+
+def now_wib():
+    """Return current datetime in WIB (UTC+7)"""
+    return datetime.utcnow() + WIB_OFFSET
+
+def jam_sekarang_excel():
+    """Return fraction of day for WIB time (kolom C / Num)"""
+    now = now_wib()
+    return (now.hour / 24) + (now.minute / 1440) + (now.second / 86400)
+
+def tanggal_sekarang_excel():
+    """Return Excel serial date for today in WIB"""
+    dt = now_wib()
+    base = datetime(1899, 12, 30)
+    delta = dt - base
+    return delta.days + (delta.seconds / 86400)
+
+def excel_serial_to_iso(serial_str):
+    """Convert Excel serial date number to YYYY-MM-DD string"""
+    try:
+        serial = float(serial_str)
+        base = datetime(1899, 12, 30)
+        dt = base + timedelta(days=serial)
+        return dt.strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        serial_str = str(serial_str).strip()
+        if len(serial_str) == 10 and serial_str[4] == '-' and serial_str[7] == '-':
+            return serial_str
+        return serial_str
+
+def iso_to_excel_serial(iso_date_str):
+    """Convert YYYY-MM-DD to Excel serial date number"""
+    dt = datetime.strptime(iso_date_str, "%Y-%m-%d")
+    base = datetime(1899, 12, 30)
+    delta = dt - base
+    return delta.days
+
+
 # HELPERS
-
-def jam_sekarang():
-    return datetime.now().strftime("%H:%M")
-
-def tanggal_sekarang():
-    return datetime.now().strftime("%Y-%m-%d")
 
 def cari_baris_kosong(sheet):
     return len(sheet.col_values(1)) + 1
@@ -61,9 +96,18 @@ def cari_baris_kosong(sheet):
 
 def tulis_transaksi(akun, payee, memo, kategori, payment, deposit):
     baris = cari_baris_kosong(sheet_transaksi)
+    tgl_excel = tanggal_sekarang_excel()
+    jam_excel = jam_sekarang_excel()
+    
     data = [
-        akun, tanggal_sekarang(), jam_sekarang(),
-        payee, memo, "", kategori, "c",
+        akun,           # A: Akun
+        tgl_excel,      # B: Tanggal (Excel serial)
+        jam_excel,      # C: Num (fraction of day = WIB time)
+        payee,          # D: Payee (keterangan panjang)
+        memo,           # E: Memo (nama barang/item)
+        "",             # F: Tag
+        kategori,       # G: Category
+        "c",            # H: Clr
         int(payment) if payment else "",
         int(deposit) if deposit else "",
     ]
@@ -75,18 +119,19 @@ def tulis_transaksi(akun, payee, memo, kategori, payment, deposit):
 
 
 def tulis_transfer(dari_akun, ke_akun, nominal, memo="Pindah Saldo"):
-    tgl = tanggal_sekarang()
-    jam = jam_sekarang()
+    tgl_excel = tanggal_sekarang_excel()
+    jam_excel = jam_sekarang_excel()
     b1 = cari_baris_kosong(sheet_transaksi)
+    
     sheet_transaksi.update(
         range_name=f"A{b1}:J{b1}",
-        values=[[dari_akun, tgl, jam, "-", memo, "", "[Transfer]", "c", int(nominal), ""]],
+        values=[[dari_akun, tgl_excel, jam_excel, "-", memo, "", "[Transfer]", "c", int(nominal), ""]],
         value_input_option="USER_ENTERED",
     )
     b2 = b1 + 1
     sheet_transaksi.update(
         range_name=f"A{b2}:J{b2}",
-        values=[[ke_akun, tgl, jam, "-", memo, "", "[Transfer]", "c", "", int(nominal)]],
+        values=[[ke_akun, tgl_excel, jam_excel, "-", memo, "", "[Transfer]", "c", "", int(nominal)]],
         value_input_option="USER_ENTERED",
     )
 
@@ -107,11 +152,20 @@ def get_semua_transaksi():
             deposit = int(float(b[9])) if b[9].strip() else 0
         except ValueError:
             deposit = 0
+        
+        tgl_iso = excel_serial_to_iso(b[1])
+        
         hasil.append({
-            "akun": b[0].strip(), "tgl": b[1].strip(), "jam": b[2].strip(),
-            "payee": b[3].strip(), "memo": b[4].strip(), "tag": b[5].strip(),
-            "kategori": b[6].strip(), "clr": b[7].strip(),
-            "payment": payment, "deposit": deposit,
+            "akun": b[0].strip(), 
+            "tgl": tgl_iso, 
+            "jam": b[2].strip(), 
+            "payee": b[3].strip(), 
+            "memo": b[4].strip(), 
+            "tag": b[5].strip(),
+            "kategori": b[6].strip(), 
+            "clr": b[7].strip(),
+            "payment": payment, 
+            "deposit": deposit,
         })
     return hasil
 
@@ -130,7 +184,7 @@ def saldo_per_akun(transaksi):
 
 
 def get_month_expense_for_category(kategori):
-    bulan_ini = datetime.now().strftime("%Y-%m")
+    bulan_ini = now_wib().strftime("%Y-%m")
     total = 0
     for t in get_semua_transaksi():
         if t["tgl"].startswith(bulan_ini) and t["kategori"] == kategori:
@@ -139,18 +193,26 @@ def get_month_expense_for_category(kategori):
 
 
 def get_anggaran_for_category(kategori):
+    """Baca anggaran dari sheet Budget, kolom sesuai bulan"""
     try:
-        sheet_anggaran = sheet_utama.worksheet("Anggaran")
-        data = sheet_anggaran.get_all_values()
-        for row in data[1:]:
-            if len(row) >= 2 and row[0].strip() == kategori:
-                try:
-                    return float(row[1].replace(".", "").replace(",", ""))
-                except ValueError:
-                    return 0
+        sheet_budget = sheet_utama.worksheet("Budget")
+        data = sheet_budget.get_all_values()
+        
+        bulan_ini = now_wib().month
+        col_index = bulan_ini
+        
+        for i, row in enumerate(data):
+            if len(row) > col_index and row[0].strip() == kategori:
+                val = row[col_index].strip()
+                if val:
+                    val_clean = val.replace(".", "").replace(",", ".")
+                    try:
+                        return float(val_clean)
+                    except ValueError:
+                        return 0
+        return 0
     except Exception:
-        pass
-    return 0
+        return 0
 
 
 def get_recent(n=10):
@@ -159,7 +221,7 @@ def get_recent(n=10):
 
 
 def get_summary():
-    bulan_ini = datetime.now().strftime("%Y-%m")
+    bulan_ini = now_wib().strftime("%Y-%m")
     total_income = 0
     total_expense = 0
     by_category = {}
@@ -188,7 +250,7 @@ def get_summary():
 
 
 def get_week_transactions():
-    hari_ini = datetime.now().date()
+    hari_ini = now_wib().date()
     tujuh_lalu = hari_ini - timedelta(days=6)
     hasil = []
     for t in get_semua_transaksi():
