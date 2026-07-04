@@ -18,6 +18,14 @@ if not _sa_json:
 # Strip surrounding quotes if the value was stored with them
 if _sa_json.startswith(("'", '"')) and _sa_json.endswith(("'", '"')):
     _sa_json = _sa_json[1:-1]
+# Fix private_key: replace literal newlines inside the JSON string with \n escapes
+# so the JSON parser can handle keys that were pasted with real line breaks
+_sa_json = re.sub(
+    r'("private_key"\s*:\s*")(.*?)(")',
+    lambda m: m.group(1) + m.group(2).replace('\n', '\\n') + m.group(3),
+    _sa_json,
+    flags=re.DOTALL,
+)
 try:
     KUNCI_GOOGLE = json.loads(_sa_json)
 except json.JSONDecodeError as e:
