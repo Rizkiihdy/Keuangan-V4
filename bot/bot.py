@@ -17,6 +17,7 @@ from sheets import (
     get_month_expense_for_category, get_anggaran_for_category,
     now_wib,
 )
+from sheets_manager import get_manager, list_spreadsheets, list_sheets
 from gemini_ai import GeminiAI, QuotaExhaustedError
 from config import (
     BOT_NAME, TIPE_PEMASUKAN, TIPE_PENGELUARAN,
@@ -830,6 +831,277 @@ async def _send_weekly_report(context):
             logger.error(f"Weekly report failed for {chat_id_str}: {e}")
 
 
+async def invest_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    args = context.args
+    if not args or len(args) < 4:
+        await update.message.reply_text(
+            f"Cara pakai: `/invest <jenis> <nama> <lot> <harga_beli> [broker] [ket]`\n\n"
+            f"Contoh: `/invest saham BBCA 100 8500 RTI beli pagi`\n"
+            f"Jenis: saham, reksadana, obligasi, crypto, emas",
+            parse_mode="Markdown",
+        )
+        return
+    jenis, nama, lot_str, harga_str = args[0], args[1], args[2], args[3]
+    try:
+        lot = float(lot_str.replace(",", ""))
+        harga = float(harga_str.replace(",", ""))
+    except ValueError:
+        await update.message.reply_text("Lot dan harga harus angka ya!")
+        return
+    total = int(lot * harga)
+    broker = args[4] if len(args) > 4 else "-"
+    ket = " ".join(args[5:]) if len(args) > 5 else "-"
+    mgr = get_manager("investasi", "Portfolio")
+    mgr.append_row({
+        "Tanggal": now_wib().strftime("%Y-%m-%d"),
+        "Jenis": jenis, "Nama": nama, "Jumlah Lot": lot,
+        "Harga Beli": harga, "Total": total, "Broker": broker, "Keterangan": ket,
+    })
+    await update.message.reply_text(
+        f"✅ *Investasi Tercatat!*\n"
+        f"{nama} ({jenis}) — {lot} lot x {rp(harga)} = {rp(total)}\n"
+        f"Broker: {broker}", parse_mode="Markdown",
+    )
+
+
+async def dividen_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            f"Cara pakai: `/dividen <nama_saham> <jumlah> [broker] [ket]`\n\n"
+            f"Contoh: `/dividen BBCA 125000 RTI dividen Q2`",
+            parse_mode="Markdown",
+        )
+        return
+    nama, jml_str = args[0], args[1]
+    try:
+        jml = float(jml_str.replace(",", ""))
+    except ValueError:
+        await update.message.reply_text("Jumlah harus angka ya!")
+        return
+    broker = args[2] if len(args) > 2 else "-"
+    ket = " ".join(args[3:]) if len(args) > 3 else "-"
+    mgr = get_manager("investasi", "Dividen")
+    mgr.append_row({
+        "Tanggal": now_wib().strftime("%Y-%m-%d"),
+        "Nama Saham": nama, "Jumlah Dividen": jml, "Broker": broker, "Keterangan": ket,
+    })
+    await update.message.reply_text(
+        f"💰 *Dividen Tercatat!*\n{nama} — {rp(jml)}\nBroker: {broker}",
+        parse_mode="Markdown",
+    )
+
+
+async def jual_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    args = context.args
+    if not args or len(args) < 5:
+        await update.message.reply_text(
+            f"Cara pakai: `/jual <jenis> <nama> <lot> <harga_beli> <harga_jual> [broker]`\n\n"
+            f"Contoh: `/jual saham BBCA 100 8500 9200 RTI`",
+            parse_mode="Markdown",
+        )
+        return
+    jenis, nama, lot_str, hb_str, hj_str = args[0], args[1], args[2], args[3], args[4]
+    try:
+        lot = float(lot_str.replace(",", ""))
+        hb = float(hb_str.replace(",", ""))
+        hj = float(hj_str.replace(",", ""))
+    except ValueError:
+        await update.message.reply_text("Semua angka harus valid ya!")
+        return
+    pl = int((hj - hb) * lot)
+    broker = args[5] if len(args) > 5 else "-"
+    mgr = get_manager("investasi", "Realisasi")
+    mgr.append_row({
+        "Tanggal": now_wib().strftime("%Y-%m-%d"),
+        "Jenis": jenis, "Nama": nama, "Jumlah Lot": lot,
+        "Harga Beli": hb, "Harga Jual": hj, "Profit/Loss": pl, "Broker": broker,
+    })
+    emoji = "🟢" if pl >= 0 else "🔴"
+    await update.message.reply_text(
+        f"{emoji} *Realisasi Tercatat!*\n{nama} — {lot} lot\n"
+        f"Beli: {rp(hb)} → Jual: {rp(hj)}\n"
+        f"Profit/Loss: {rp(pl)}", parse_mode="Markdown",
+    )
+
+
+async def utang_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            f"Cara pakai: `/utang <nama> <jumlah> [jatuh_tempo] [ket]`\n\n"
+            f"Contoh: `/utang John 500000 2026-07-15 pinjam buat beli laptop`",
+            parse_mode="Markdown",
+        )
+        return
+    nama = args[0]
+    try:
+        jml = float(args[1].replace(",", ""))
+    except ValueError:
+        await update.message.reply_text("Jumlah harus angka!")
+        return
+    jt = args[2] if len(args) > 2 else "-"
+    ket = " ".join(args[3:]) if len(args) > 3 else "-"
+    mgr = get_manager("utang_piutang", "Utang")
+    mgr.append_row({
+        "Tanggal": now_wib().strftime("%Y-%m-%d"),
+        "Nama": nama, "Jumlah": jml, "Status": "Belum Lunas",
+        "Jatuh Tempo": jt, "Keterangan": ket,
+    })
+    await update.message.reply_text(
+        f"📋 *Utang Tercatat!*\n{nama} — {rp(jml)}\nJatuh tempo: {jt}",
+        parse_mode="Markdown",
+    )
+
+
+async def piutang_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            f"Cara pakai: `/piutang <nama> <jumlah> [jatuh_tempo] [ket]`\n\n"
+            f"Contoh: `/piutang John 500000 2026-07-15 pinjamkan buat beli laptop`",
+            parse_mode="Markdown",
+        )
+        return
+    nama = args[0]
+    try:
+        jml = float(args[1].replace(",", ""))
+    except ValueError:
+        await update.message.reply_text("Jumlah harus angka!")
+        return
+    jt = args[2] if len(args) > 2 else "-"
+    ket = " ".join(args[3:]) if len(args) > 3 else "-"
+    mgr = get_manager("utang_piutang", "Piutang")
+    mgr.append_row({
+        "Tanggal": now_wib().strftime("%Y-%m-%d"),
+        "Nama": nama, "Jumlah": jml, "Status": "Belum Diterima",
+        "Jatuh Tempo": jt, "Keterangan": ket,
+    })
+    await update.message.reply_text(
+        f"📋 *Piutang Tercatat!*\n{nama} — {rp(jml)}\nJatuh tempo: {jt}",
+        parse_mode="Markdown",
+    )
+
+
+async def goal_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    args = context.args
+    if not args or len(args) < 3:
+        await update.message.reply_text(
+            f"Cara pakai: `/goal <nama_goal> <target_jumlah> <deadline> [ket]`\n\n"
+            f"Contoh: `/goal 'Motor Baru' 15000000 2026-12-31 tabungan motor`",
+            parse_mode="Markdown",
+        )
+        return
+    try:
+        target = float(args[1].replace(",", ""))
+    except ValueError:
+        await update.message.reply_text("Target jumlah harus angka!")
+        return
+    deadline = args[2]
+    ket = " ".join(args[3:]) if len(args) > 3 else "-"
+    mgr = get_manager("target_tabungan", "Goals")
+    mgr.append_row({
+        "Nama Goal": args[0], "Target Jumlah": target, "Terkumpul": 0,
+        "Deadline": deadline, "Status": "Aktif", "Keterangan": ket,
+    })
+    await update.message.reply_text(
+        f"🎯 *Goal Baru!*\n{args[0]} — Target: {rp(target)}\nDeadline: {deadline}",
+        parse_mode="Markdown",
+    )
+
+
+async def tabung_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            f"Cara pakai: `/tabung <nama_goal> <jumlah>`\n\n"
+            f"Contoh: `/tabung 'Motor Baru' 2500000`",
+            parse_mode="Markdown",
+        )
+        return
+    nama_goal = args[0]
+    try:
+        jml = float(args[1].replace(",", ""))
+    except ValueError:
+        await update.message.reply_text("Jumlah harus angka!")
+        return
+    mgr_goals = get_manager("target_tabungan", "Goals")
+    rows = mgr_goals.get_all_rows()
+    goal = next((r for r in rows if r.get("Nama Goal") == nama_goal), None)
+    if not goal:
+        await update.message.reply_text(f"Goal '{nama_goal}' nggak ketemu nih. Cek dulu ya!")
+        return
+    try:
+        terkumpul = float(goal.get("Terkumpul", 0)) + jml
+    except ValueError:
+        terkumpul = jml
+    mgr_prog = get_manager("target_tabungan", "Progress")
+    mgr_prog.append_row({
+        "Tanggal": now_wib().strftime("%Y-%m-%d"),
+        "Nama Goal": nama_goal, "Jumlah Masuk": jml, "Saldo Goal": terkumpul,
+    })
+    await update.message.reply_text(
+        f"💰 *Tabungan Masuk!*\n{nama_goal} +{rp(jml)}\n"
+        f"Total terkumpul: {rp(terkumpul)}", parse_mode="Markdown",
+    )
+
+
+async def aset_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    args = context.args
+    if not args or len(args) < 3:
+        await update.message.reply_text(
+            f"Cara pakai: `/aset <nama> <jenis> <nilai_beli> [nilai_sekarang] [ket]`\n\n"
+            f"Contoh: `/aset 'iPhone 15' Elektronik 15000000 14000000 hp baru`",
+            parse_mode="Markdown",
+        )
+        return
+    nama, jenis = args[0], args[1]
+    try:
+        nilai_beli = float(args[2].replace(",", ""))
+    except ValueError:
+        await update.message.reply_text("Nilai beli harus angka!")
+        return
+    nilai_now = float(args[3].replace(",", "")) if len(args) > 3 else nilai_beli
+    ket = " ".join(args[4:]) if len(args) > 4 else "-"
+    mgr = get_manager("aset", "Aset")
+    mgr.append_row({
+        "Nama Aset": nama, "Jenis": jenis, "Nilai Beli": nilai_beli,
+        "Nilai Sekarang": nilai_now, "Tanggal Beli": now_wib().strftime("%Y-%m-%d"),
+        "Keterangan": ket,
+    })
+    await update.message.reply_text(
+        f"🏠 *Aset Tercatat!*\n{nama} ({jenis})\nBeli: {rp(nilai_beli)}\nSekarang: {rp(nilai_now)}",
+        parse_mode="Markdown",
+    )
+
+
+async def list_sheets_cmd(update, context):
+    name = fname(update.effective_user)
+    _register(update.effective_user, update.effective_chat.id)
+    lines = [f"📊 *Spreadsheet yang tersedia:*\n"]
+    for key, spec in list_spreadsheets():
+        lines.append(f"\n*{key}* — `{spec['name']}`")
+        for sh in list_sheets(key):
+            lines.append(f"  • {sh}")
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
 async def post_init(app):
     commands = [
         BotCommand("start", "Mulai bot Oliv"),
@@ -845,6 +1117,15 @@ async def post_init(app):
         BotCommand("budget", "Status budget bulan ini"),
         BotCommand("terakhir", "10 transaksi terakhir"),
         BotCommand("tanya", "Tanya Oliv soal keuangan"),
+        BotCommand("invest", "Catat investasi/beli saham"),
+        BotCommand("dividen", "Catat dividen diterima"),
+        BotCommand("jual", "Catat jual investasi"),
+        BotCommand("utang", "Catat utang"),
+        BotCommand("piutang", "Catat piutang"),
+        BotCommand("goal", "Buat target tabungan"),
+        BotCommand("tabung", "Masukin dulu ke goal"),
+        BotCommand("aset", "Catat pembelian aset"),
+        BotCommand("sheets", "Lihat semua spreadsheet"),
     ]
     await app.bot.set_my_commands(commands)
     logger.info("Bot commands set.")
@@ -869,6 +1150,15 @@ def main():
     app.add_handler(CommandHandler("budget",       budget_cmd))
     app.add_handler(CommandHandler("terakhir",     terakhir))
     app.add_handler(CommandHandler("tanya",        tanya))
+    app.add_handler(CommandHandler("invest",       invest_cmd))
+    app.add_handler(CommandHandler("dividen",      dividen_cmd))
+    app.add_handler(CommandHandler("jual",         jual_cmd))
+    app.add_handler(CommandHandler("utang",        utang_cmd))
+    app.add_handler(CommandHandler("piutang",      piutang_cmd))
+    app.add_handler(CommandHandler("goal",         goal_cmd))
+    app.add_handler(CommandHandler("tabung",       tabung_cmd))
+    app.add_handler(CommandHandler("aset",         aset_cmd))
+    app.add_handler(CommandHandler("sheets",       list_sheets_cmd))
 
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_free_text))
