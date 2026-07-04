@@ -1,36 +1,46 @@
-# [Project name]
+# Oliv — Personal Finance Bot
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Oliv is a Telegram bot that helps track personal finances by logging transactions (income, expenses, transfers) to Google Sheets using natural language and receipt photo scanning powered by Gemini AI.
 
 ## Run & Operate
 
+- `python main.py` — run the Telegram finance bot (main workflow)
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+
+## Required Secrets
+
+All secrets are stored in Replit's secret store (never hardcoded):
+- `TELEGRAM_TOKEN` — Telegram bot token
+- `GEMINI_API_KEY` — Google Gemini API key for AI parsing
+- `GOOGLE_SERVICE_ACCOUNT_JSON` — Full JSON content of the Google service account key
+- `GOOGLE_SHEET_ID` — (env var) Google Sheet ID for the spreadsheet
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Bot**: Python 3.11, python-telegram-bot, google-genai, gspread
+- **AI**: Google Gemini 2.0/2.5 Flash (text + vision for receipt scanning)
+- **Storage**: Google Sheets ("keuangan v4" → "Transaksi" worksheet)
+- **API**: Express 5, Node.js, TypeScript (pnpm monorepo)
+- **DB**: PostgreSQL + Drizzle ORM (for API server)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `bot/bot.py` — Telegram command handlers and message routing
+- `bot/gemini_ai.py` — AI transaction parsing and receipt OCR
+- `bot/sheets.py` — Google Sheets read/write operations
+- `bot/config.py` — Categories, accounts, keywords configuration
+- `main.py` — Entry point (adds bot/ to sys.path, runs bot)
+- `artifacts/api-server/` — Express API server
+- `artifacts/mockup-sandbox/` — Vite component preview server
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
+- No login flow — bot is Telegram-native, user identity comes from Telegram
+- All credentials in Replit secrets, never in code
+- GOOGLE_SERVICE_ACCOUNT_JSON may have trailing commas (pasted from GCloud Console) — sheets.py cleans this automatically
+- Bot runs via `python main.py` from workspace root (not `cd bot && python bot.py`)
 
 ## User preferences
 
@@ -38,8 +48,6 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- The GOOGLE_SERVICE_ACCOUNT_JSON secret may be pasted with trailing commas — the loader in `bot/sheets.py` handles this automatically
+- If the bot shows "409 Conflict", there are two instances running simultaneously — stop one and wait ~30s before restarting
+- Job queue (weekly report scheduler) requires `pip install "python-telegram-bot[job-queue]"` — currently disabled gracefully
