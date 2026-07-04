@@ -29,7 +29,8 @@ All secrets are stored in Replit's secret store (never hardcoded):
 
 - `bot/bot.py` — Telegram command handlers and message routing
 - `bot/gemini_ai.py` — AI transaction parsing and receipt OCR
-- `bot/sheets.py` — Google Sheets read/write operations
+- `bot/sheets.py` — Google Sheets read/write (keuangan v4)
+- `bot/sheets_manager.py` — Multi-spreadsheet manager (investasi, utang, aset, dll)
 - `bot/config.py` — Categories, accounts, keywords configuration
 - `main.py` — Entry point (adds bot/ to sys.path, runs bot)
 - `artifacts/api-server/` — Express API server

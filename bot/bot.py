@@ -835,15 +835,21 @@ async def invest_cmd(update, context):
     name = fname(update.effective_user)
     _register(update.effective_user, update.effective_chat.id)
     args = context.args
-    if not args or len(args) < 4:
+    if not args or len(args) < 5:
         await update.message.reply_text(
-            f"Cara pakai: `/invest <jenis> <nama> <lot> <harga_beli> [broker] [ket]`\n\n"
-            f"Contoh: `/invest saham BBCA 100 8500 RTI beli pagi`\n"
+            f"Cara pakai: `/invest <akun> <jenis> <nama> <lot> <harga_beli> [broker] [ket]`\n\n"
+            f"Akun: 1 / 2 / 3\n"
+            f"Contoh: `/invest 1 saham BBCA 100 8500 RTI beli pagi`\n"
             f"Jenis: saham, reksadana, obligasi, crypto, emas",
             parse_mode="Markdown",
         )
         return
-    jenis, nama, lot_str, harga_str = args[0], args[1], args[2], args[3]
+    akun_no = args[0]
+    if akun_no not in ("1", "2", "3"):
+        await update.message.reply_text("Akun harus 1, 2, atau 3!")
+        return
+    sheet_name = f"Account{akun_no}"
+    jenis, nama, lot_str, harga_str = args[1], args[2], args[3], args[4]
     try:
         lot = float(lot_str.replace(",", ""))
         harga = float(harga_str.replace(",", ""))
@@ -851,16 +857,16 @@ async def invest_cmd(update, context):
         await update.message.reply_text("Lot dan harga harus angka ya!")
         return
     total = int(lot * harga)
-    broker = args[4] if len(args) > 4 else "-"
-    ket = " ".join(args[5:]) if len(args) > 5 else "-"
-    mgr = get_manager("investasi", "Portfolio")
+    broker = args[5] if len(args) > 5 else "-"
+    ket = " ".join(args[6:]) if len(args) > 6 else "-"
+    mgr = get_manager("investasi", sheet_name)
     mgr.append_row({
         "Tanggal": now_wib().strftime("%Y-%m-%d"),
         "Jenis": jenis, "Nama": nama, "Jumlah Lot": lot,
         "Harga Beli": harga, "Total": total, "Broker": broker, "Keterangan": ket,
     })
     await update.message.reply_text(
-        f"✅ *Investasi Tercatat!*\n"
+        f"✅ *Investasi Tercatat di Account {akun_no}!*\n"
         f"{nama} ({jenis}) — {lot} lot x {rp(harga)} = {rp(total)}\n"
         f"Broker: {broker}", parse_mode="Markdown",
     )
@@ -870,28 +876,35 @@ async def dividen_cmd(update, context):
     name = fname(update.effective_user)
     _register(update.effective_user, update.effective_chat.id)
     args = context.args
-    if not args or len(args) < 2:
+    if not args or len(args) < 3:
         await update.message.reply_text(
-            f"Cara pakai: `/dividen <nama_saham> <jumlah> [broker] [ket]`\n\n"
-            f"Contoh: `/dividen BBCA 125000 RTI dividen Q2`",
+            f"Cara pakai: `/dividen <akun> <nama_saham> <jumlah> [broker] [ket]`\n\n"
+            f"Akun: 1 / 2 / 3\n"
+            f"Contoh: `/dividen 1 BBCA 125000 RTI dividen Q2`",
             parse_mode="Markdown",
         )
         return
-    nama, jml_str = args[0], args[1]
+    akun_no = args[0]
+    if akun_no not in ("1", "2", "3"):
+        await update.message.reply_text("Akun harus 1, 2, atau 3!")
+        return
+    sheet_name = f"Account{akun_no}"
+    nama, jml_str = args[1], args[2]
     try:
         jml = float(jml_str.replace(",", ""))
     except ValueError:
         await update.message.reply_text("Jumlah harus angka ya!")
         return
-    broker = args[2] if len(args) > 2 else "-"
-    ket = " ".join(args[3:]) if len(args) > 3 else "-"
-    mgr = get_manager("investasi", "Dividen")
+    broker = args[3] if len(args) > 3 else "-"
+    ket = " ".join(args[4:]) if len(args) > 4 else "-"
+    mgr = get_manager("investasi", sheet_name)
     mgr.append_row({
         "Tanggal": now_wib().strftime("%Y-%m-%d"),
-        "Nama Saham": nama, "Jumlah Dividen": jml, "Broker": broker, "Keterangan": ket,
+        "Nama": nama, "Jumlah Lot": "", "Harga Beli": "",
+        "Total": jml, "Broker": broker, "Keterangan": f"Dividen — {ket}",
     })
     await update.message.reply_text(
-        f"💰 *Dividen Tercatat!*\n{nama} — {rp(jml)}\nBroker: {broker}",
+        f"💰 *Dividen Tercatat di Account {akun_no}!*\n{nama} — {rp(jml)}\nBroker: {broker}",
         parse_mode="Markdown",
     )
 
@@ -900,14 +913,20 @@ async def jual_cmd(update, context):
     name = fname(update.effective_user)
     _register(update.effective_user, update.effective_chat.id)
     args = context.args
-    if not args or len(args) < 5:
+    if not args or len(args) < 6:
         await update.message.reply_text(
-            f"Cara pakai: `/jual <jenis> <nama> <lot> <harga_beli> <harga_jual> [broker]`\n\n"
-            f"Contoh: `/jual saham BBCA 100 8500 9200 RTI`",
+            f"Cara pakai: `/jual <akun> <jenis> <nama> <lot> <harga_beli> <harga_jual> [broker]`\n\n"
+            f"Akun: 1 / 2 / 3\n"
+            f"Contoh: `/jual 1 saham BBCA 100 8500 9200 RTI`",
             parse_mode="Markdown",
         )
         return
-    jenis, nama, lot_str, hb_str, hj_str = args[0], args[1], args[2], args[3], args[4]
+    akun_no = args[0]
+    if akun_no not in ("1", "2", "3"):
+        await update.message.reply_text("Akun harus 1, 2, atau 3!")
+        return
+    sheet_name = f"Account{akun_no}"
+    jenis, nama, lot_str, hb_str, hj_str = args[1], args[2], args[3], args[4], args[5]
     try:
         lot = float(lot_str.replace(",", ""))
         hb = float(hb_str.replace(",", ""))
@@ -916,16 +935,17 @@ async def jual_cmd(update, context):
         await update.message.reply_text("Semua angka harus valid ya!")
         return
     pl = int((hj - hb) * lot)
-    broker = args[5] if len(args) > 5 else "-"
-    mgr = get_manager("investasi", "Realisasi")
+    broker = args[6] if len(args) > 6 else "-"
+    mgr = get_manager("investasi", sheet_name)
     mgr.append_row({
         "Tanggal": now_wib().strftime("%Y-%m-%d"),
-        "Jenis": jenis, "Nama": nama, "Jumlah Lot": lot,
-        "Harga Beli": hb, "Harga Jual": hj, "Profit/Loss": pl, "Broker": broker,
+        "Jenis": jenis, "Nama": nama, "Jumlah Lot": -lot,
+        "Harga Beli": hb, "Total": int(lot * hj), "Broker": broker,
+        "Keterangan": f"Jual — Profit/Loss: {rp(pl)}",
     })
     emoji = "🟢" if pl >= 0 else "🔴"
     await update.message.reply_text(
-        f"{emoji} *Realisasi Tercatat!*\n{nama} — {lot} lot\n"
+        f"{emoji} *Realisasi Tercatat di Account {akun_no}!*\n{nama} — {lot} lot\n"
         f"Beli: {rp(hb)} → Jual: {rp(hj)}\n"
         f"Profit/Loss: {rp(pl)}", parse_mode="Markdown",
     )
@@ -950,7 +970,7 @@ async def utang_cmd(update, context):
         return
     jt = args[2] if len(args) > 2 else "-"
     ket = " ".join(args[3:]) if len(args) > 3 else "-"
-    mgr = get_manager("utang_piutang", "Utang")
+    mgr = get_manager("utang", "Calculator")
     mgr.append_row({
         "Tanggal": now_wib().strftime("%Y-%m-%d"),
         "Nama": nama, "Jumlah": jml, "Status": "Belum Lunas",
@@ -981,7 +1001,7 @@ async def piutang_cmd(update, context):
         return
     jt = args[2] if len(args) > 2 else "-"
     ket = " ".join(args[3:]) if len(args) > 3 else "-"
-    mgr = get_manager("utang_piutang", "Piutang")
+    mgr = get_manager("utang", "Calculator")
     mgr.append_row({
         "Tanggal": now_wib().strftime("%Y-%m-%d"),
         "Nama": nama, "Jumlah": jml, "Status": "Belum Diterima",
@@ -1011,7 +1031,7 @@ async def goal_cmd(update, context):
         return
     deadline = args[2]
     ket = " ".join(args[3:]) if len(args) > 3 else "-"
-    mgr = get_manager("target_tabungan", "Goals")
+    mgr = get_manager("keuangan", "Goals")
     mgr.append_row({
         "Nama Goal": args[0], "Target Jumlah": target, "Terkumpul": 0,
         "Deadline": deadline, "Status": "Aktif", "Keterangan": ket,
@@ -1039,7 +1059,7 @@ async def tabung_cmd(update, context):
     except ValueError:
         await update.message.reply_text("Jumlah harus angka!")
         return
-    mgr_goals = get_manager("target_tabungan", "Goals")
+    mgr_goals = get_manager("keuangan", "Goals")
     rows = mgr_goals.get_all_rows()
     goal = next((r for r in rows if r.get("Nama Goal") == nama_goal), None)
     if not goal:
@@ -1049,7 +1069,7 @@ async def tabung_cmd(update, context):
         terkumpul = float(goal.get("Terkumpul", 0)) + jml
     except ValueError:
         terkumpul = jml
-    mgr_prog = get_manager("target_tabungan", "Progress")
+    mgr_prog = get_manager("keuangan", "Progress")
     mgr_prog.append_row({
         "Tanggal": now_wib().strftime("%Y-%m-%d"),
         "Nama Goal": nama_goal, "Jumlah Masuk": jml, "Saldo Goal": terkumpul,
@@ -1079,7 +1099,7 @@ async def aset_cmd(update, context):
         return
     nilai_now = float(args[3].replace(",", "")) if len(args) > 3 else nilai_beli
     ket = " ".join(args[4:]) if len(args) > 4 else "-"
-    mgr = get_manager("aset", "Aset")
+    mgr = get_manager("keuangan", "Aset")
     mgr.append_row({
         "Nama Aset": nama, "Jenis": jenis, "Nilai Beli": nilai_beli,
         "Nilai Sekarang": nilai_now, "Tanggal Beli": now_wib().strftime("%Y-%m-%d"),
