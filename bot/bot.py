@@ -31,7 +31,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TELEGRAM_TOKEN  = os.environ.get("TELEGRAM_TOKEN", "8858919060:AAG36quotEXjaiI4VSpZE_iO0Bi4k7e-JPE")
+TELEGRAM_TOKEN  = os.environ.get("TELEGRAM_TOKEN", "")
+if not TELEGRAM_TOKEN:
+    raise RuntimeError("TELEGRAM_TOKEN environment variable is not set.")
 REGISTRY_FILE   = os.path.join(os.path.dirname(__file__), "user_registry.json")
 
 ai     = GeminiAI()

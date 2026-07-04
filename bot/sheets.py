@@ -12,19 +12,16 @@ from config import (
 
 # GOOGLE SHEETS AUTH
 
-KUNCI_GOOGLE = {
-    "type": "service_account",
-    "project_id": "project-keuangan-v4",
-    "private_key_id": "349ce386732c2f8371c88532d986576b3958f9b6",
-    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC04AVi9UGu2Xhd\nx835Azd8WDMyy80nI+SLDxHmphRn4MIPkixZgCU/TyTF52R9q+XofavCcgj5jlro\nMizrmP6RF/3qbI+dKmM6hVVnHqxHEUJ4W0BShBBpKNOKtvyEgn6ifELgiCo+o4h1\n0ckLvvNsEJbuxWYXSI/mJPnCdb/v8mulYV+RRMLsVezppzHgoD7/x84TEh8HaRNO\nxLI3jV9t1IOZs3FVPYC6spBuLKKOBFCFnUDirPJjdrnym+Kq1JHjpyDQLogxRbGn\n2Wp4gVnhG33sgyVQjqUYUJVzCgtMzPuKStAvfjiF5PPP5aCOhfMR6s4q1XV/lQuM\n46XisQzDAgMBAAECggEAHL96Zlxq1c/qH1BcKWwxy8lM9zwzMuReinJDuxrB0DIw\nmz71Xj2i2JQgrnUfoLsgmI+DgYKUcJhdVIhyYU542jYrp7ByMbMEqyQkCyFx6lMQ\n8zDgYVJs3/nwMsebYl2co6tdCcjlRf1so/qgRLCoieV9HR2HeMM8s9dD/HywnAHx\nuNXJyVQhOYlVrR0Ui/aowZ5Z0+JezlHX/XlYR3XOIDcS7sAL8SPzzw3EMj9KgX5b\nQ9fAnJ1s5VB4FCbKLyZvTaKXBjP6KL1u27qhKzxRa9vo+oHRQ+VTin2l+sp/z6zq\nuMwyuAS6wENvZigKXpplfJccrICEhAHYfaBBtXK0cQKBgQDX0F0cQkOk+KCLMy8/\nn+nSXzqr+AgRBOOUA9riKDZOSgLFXOZBsixIitEP5gJWiDqvZerk0/QMZLN9OEKI\nIaFXWDBRDRWb+bM5Lham8/1SgE5QRzlOFNATeQMb1OuSjdeQ9npmXM5YcNhvCwaL\nOUZ7b55KnAevEpdyImnM9q8SiQKBgQDWjihNQmPtOXOuxkkcfbLsx7MRnfR3sIA/\nH36Kh179qIEk3cWTKQFRzdioDylm4dO0H/3AAJTdT0A3huelHqkxvpxsJB5Hne2Y\nRiVPm8+Ns8oFJBwTgLE8y7/LcpLWDS9gAADK2MmUgj9HKkGZRzQ1fW90ogBztkLz\nb/JIIYSB6wKBgQCfyWMXCCzjWT4ssjH6bqEFpIJhTxxR1YfWUGBgcBt9LakNjbHh\n1FSbRURy+/6hKO4ibVhUImYgQvLt9Ji2CAhYDjB/4isst90tqeUVqbLWwa66G3Hf\nUOOad0+I7MWaVbDUYNnRLkeNDcgBt20Z6cc4nzTY0tuRkTdWRwqEueR32QKBgFjV\nrUwn4/Xx5rsDsHvSc8Xj/Xma3AC+nKsGID+9QxBlt2sLQ+XlgX1cbItRE8RcVmpr\nIIZh90EWsjELc1gDtOw6zstbvQnMEvcMfCBVE//I5ClyxQkyLLBOcFANVUy5Utc9\nyRYz4mrR7t9JWLXdLHnFQOOau/MtENV4kWlaL2IXAoGALGFKCTn+RzIBe3wWyoH8\nta+iBuchAwXaxRQcpQsmefDGPaUulT82pdLK6c4UneZ5cPnkko2wRjogRMVmE0O9\nl0Owjb0lNYjRkbUwalyrKRahi8gC4MKsd/kyEk8tmzuV4IguxktWHKKI3SnkmuUL\n97pETIBFFFsfxyQ0m8bl3tw=\n-----END PRIVATE KEY-----\n",
-    "client_email": "iki-bot-v4@project-keuangan-v4.iam.gserviceaccount.com",
-    "client_id": "112117775587929019607",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/iki-bot-v4%40project-keuangan-v4.iam.gserviceaccount.com",
-    "universe_domain": "googleapis.com",
-}
+_sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+if not _sa_json:
+    raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set.")
+# Strip surrounding quotes if the value was stored with them
+if _sa_json.startswith(("'", '"')) and _sa_json.endswith(("'", '"')):
+    _sa_json = _sa_json[1:-1]
+try:
+    KUNCI_GOOGLE = json.loads(_sa_json)
+except json.JSONDecodeError as e:
+    raise RuntimeError(f"GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON: {e}")
 
 SCOPE = [
     "https://spreadsheets.google.com/feeds",

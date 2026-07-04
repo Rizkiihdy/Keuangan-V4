@@ -59,3 +59,4 @@ packages = ["flyctl"]
 
 [userenv.shared]
 GOOGLE_SHEET_ID = "1ODbVMvZajx-mtcDDrFcOLvpNPnNvlxhTYY-5x386LEg"
+PORT = "5000"
