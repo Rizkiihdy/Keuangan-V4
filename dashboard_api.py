@@ -6,11 +6,24 @@ from functools import wraps
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
-sys.path.insert(0, os.path.join(os.getcwd(), "bot"))
-from sheets_manager import gc, SPREADSHEETS
-
+# Health check endpoint MUST be first — before any import that might fail
 app = Flask(__name__, static_folder="dashboard/dist", static_url_path="")
 CORS(app)
+
+@app.route("/health")
+def health():
+    return jsonify({"ok": True, "service": "oliv-dashboard"})
+
+# Try to load sheets module; if it fails, still serve SPA but APIs will error gracefully
+_gc = None
+_SPREADSHEETS = None
+try:
+    sys.path.insert(0, os.path.join(os.getcwd(), "bot"))
+    from sheets_manager import gc, SPREADSHEETS
+    _gc = gc
+    _SPREADSHEETS = SPREADSHEETS
+except Exception as _e:
+    print(f"[WARN] Google Sheets not loaded: {_e}")
 
 _cache = {}
 CACHE_TTL = 60

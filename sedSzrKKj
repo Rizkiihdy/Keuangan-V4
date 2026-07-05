@@ -1,10 +1,9 @@
 modules = ["nodejs-20", "python-3.11", "web"]
 
 [deployment]
-router = "application"
 deploymentTarget = "autoscale"
-run = ["gunicorn", "--bind=0.0.0.0:5000", "--reuse-port", "--workers", "2", "dashboard_api:app"]
-build = ["bash", "-c", "cd /home/runner/workspace/dashboard && npm install && npm run build"]
+run = ["gunicorn", "--bind=0.0.0.0:5000", "--reuse-port", "dashboard_api:app"]
+build = ["bash", "-c", "cd /home/runner/workspace/dashboard && npm install && npm run build && rm -rf /home/runner/workspace/artifacts/api-server/dist && rm -rf /home/runner/workspace/artifacts/mockup-sandbox/dist"]
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
