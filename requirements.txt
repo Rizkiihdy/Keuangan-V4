@@ -2,3 +2,7 @@ python-telegram-bot
 google-genai
 gspread
 google-auth
+flask
+flask-cors
+gunicorn
+tlgbotfwk

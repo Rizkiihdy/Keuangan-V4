@@ -80,6 +80,10 @@ args = "Dashboard API"
 task = "workflow.run"
 args = "Oliv Dashboard"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Oliv Dashboard & API"
+
 [[workflows.workflow]]
 name = "Dashboard API"
 author = "agent"
@@ -104,6 +108,18 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[workflows.workflow]]
+name = "Oliv Dashboard & API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python dashboard_api.py"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
@@ -115,10 +131,6 @@ timeoutMs = 20000
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
 
 [[ports]]
 localPort = 8082
