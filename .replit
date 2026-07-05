@@ -3,6 +3,9 @@ modules = ["nodejs-20", "python-3.11", "web"]
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
+run = ["gunicorn", "--bind=0.0.0.0:5000", "--reuse-port", "--chdir=/home/runner/workspace", "dashboard_api:app"]
+build = ["bash", "-c", "cd dashboard && npm install && npm run build"]
+publicDir = "dashboard/dist"
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
