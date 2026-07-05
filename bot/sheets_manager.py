@@ -85,7 +85,7 @@ class SheetManager:
 
 SPREADSHEETS = {
     "keuangan": {
-        "id": os.environ.get("GOOGLE_SHEET_ID", "1ODbVMvZajx-mtcDDrFcOLvpNPnNvlxhTYY-5x386LEg"),
+        "id": os.environ.get("GOOGLE_SHEET_ID", "1nbDsBmrQ74g-yC1k8_XVbh8kIP6wfC9ewjAxG6FaCtw"),
         "name": "keuangan v4",
         "sheets": {
             "Transaksi": ["Akun", "Tanggal", "Num", "Payee", "Memo", "Tag", "Category", "Clr", "PAYMENT", "DEPOSIT"],
