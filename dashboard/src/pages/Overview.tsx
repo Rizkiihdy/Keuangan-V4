@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchOverview, formatRp } from "../api/client";
 import StatCard from "../components/StatCard";
-import Spinner from "../components/Spinner";
+import { Spinner } from "../components/Spinner";
 
 export default function Overview() {
   const [data, setData] = useState<any>(null);
