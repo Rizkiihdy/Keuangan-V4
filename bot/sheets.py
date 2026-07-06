@@ -73,18 +73,45 @@ def tanggal_sekarang_excel():
     delta = dt - base
     return delta.days + (delta.seconds / 86400)
 
-def excel_serial_to_iso(serial_str):
-    """Convert Excel serial date number to YYYY-MM-DD string"""
+def parse_rp(val_str):
+    """Parse nilai rupiah: 'Rp3.700.000' → 3700000, '3700000' → 3700000"""
+    if not val_str:
+        return 0
+    s = str(val_str).strip()
+    if not s:
+        return 0
+    # Hapus Rp, spasi, titik (thousand separator Indonesia), lalu ganti koma→titik
+    s = re.sub(r"[Rp\s]", "", s)
+    s = s.replace(".", "").replace(",", ".")
     try:
-        serial = float(serial_str)
+        return int(float(s))
+    except (ValueError, TypeError):
+        return 0
+
+def excel_serial_to_iso(serial_str):
+    """Convert Excel serial date number atau string tanggal ke YYYY-MM-DD.
+    
+    Sheet keuangan V4 menyimpan tanggal sebagai string DD/MM/YYYY
+    (misal: '08/06/2026' = 8 Juni 2026).
+    """
+    s = str(serial_str).strip()
+    if not s:
+        return ""
+    # Coba parse sebagai Excel serial number (angka)
+    try:
+        serial = float(s)
         base = datetime(1899, 12, 30)
         dt = base + timedelta(days=serial)
         return dt.strftime("%Y-%m-%d")
     except (ValueError, TypeError):
-        serial_str = str(serial_str).strip()
-        if len(serial_str) == 10 and serial_str[4] == '-' and serial_str[7] == '-':
-            return serial_str
-        return serial_str
+        pass
+    # Coba berbagai format string tanggal
+    for fmt in ("%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return s
 
 def iso_to_excel_serial(iso_date_str):
     """Convert YYYY-MM-DD to Excel serial date number"""
@@ -149,30 +176,34 @@ def tulis_transfer(dari_akun, ke_akun, nominal, memo="Pindah Saldo"):
 def get_semua_transaksi():
     semua = sheet_transaksi.get_all_values()
     hasil = []
-    for b in semua[1:]:
-        if len(b) < 10:
+    # Sheet keuangan V4: 4 baris header (row 0-2 = judul/help, row 3 = kolom header)
+    # Data mulai dari row index 4
+    for b in semua[4:]:
+        # Wajib ada akun (kolom A) dan tanggal (kolom B)
+        if not b or not b[0].strip() or not (len(b) > 1 and b[1].strip()):
             continue
-        try:
-            payment = int(float(b[8])) if b[8].strip() else 0
-        except ValueError:
-            payment = 0
-        try:
-            deposit = int(float(b[9])) if b[9].strip() else 0
-        except ValueError:
-            deposit = 0
-        
+        # Skip baris formula/summary (akun kosong atau bukan nama akun valid)
+        akun = b[0].strip()
+        if akun.startswith("[") or len(b) < 9:
+            continue
+
         tgl_iso = excel_serial_to_iso(b[1])
-        
+        if not tgl_iso:
+            continue
+
+        payment = parse_rp(b[8]) if len(b) > 8 else 0
+        deposit = parse_rp(b[9]) if len(b) > 9 else 0
+
         hasil.append({
-            "akun": b[0].strip(), 
-            "tgl": tgl_iso, 
-            "jam": b[2].strip(), 
-            "payee": b[3].strip(), 
-            "memo": b[4].strip(), 
-            "tag": b[5].strip(),
-            "kategori": b[6].strip(), 
-            "clr": b[7].strip(),
-            "payment": payment, 
+            "akun": akun,
+            "tgl": tgl_iso,
+            "jam": b[2].strip() if len(b) > 2 else "",
+            "payee": b[3].strip() if len(b) > 3 else "",
+            "memo": b[4].strip() if len(b) > 4 else "",
+            "tag": b[5].strip() if len(b) > 5 else "",
+            "kategori": b[6].strip() if len(b) > 6 else "",
+            "clr": b[7].strip() if len(b) > 7 else "",
+            "payment": payment,
             "deposit": deposit,
         })
     return hasil
@@ -201,19 +232,24 @@ def get_month_expense_for_category(kategori):
 
 
 def get_anggaran_for_category(kategori):
-    """Baca anggaran dari sheet Budget, kolom sesuai bulan"""
+    """Baca anggaran dari sheet Budget, kolom sesuai bulan.
+    
+    Struktur Budget sheet keuangan V4:
+    - Row 9: ['', '', 'Jan', 'Feb', 'Mar', ...] → Jan = col index 2
+    - Jadi bulan N → col index = N + 1
+    """
     try:
-        sheet_budget = _sheet_utama.worksheet("Budget")
+        sheet_budget = sheet_utama.worksheet("Budget")
         data = sheet_budget.get_all_values()
         
         bulan_ini = now_wib().month
-        col_index = bulan_ini
+        col_index = bulan_ini + 1  # Jan(1) → col 2, Feb(2) → col 3, dst
         
-        for i, row in enumerate(data):
+        for row in data:
             if len(row) > col_index and row[0].strip() == kategori:
                 val = row[col_index].strip()
                 if val:
-                    val_clean = val.replace(".", "").replace(",", ".")
+                    val_clean = re.sub(r"[Rp\s\.]", "", val).replace(",", ".")
                     try:
                         return float(val_clean)
                     except ValueError:
