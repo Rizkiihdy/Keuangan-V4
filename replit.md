@@ -5,9 +5,7 @@ Oliv is a Telegram bot that helps track personal finances by logging transaction
 ## Run & Operate
 
 - `python main.py` — run the Telegram finance bot (main workflow)
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `cd bot && python bot.py` — run the bot directly
 
 ## Required Secrets
 
@@ -22,8 +20,6 @@ All secrets are stored in Replit's secret store (never hardcoded):
 - **Bot**: Python 3.11, python-telegram-bot, google-genai, gspread
 - **AI**: Google Gemini 2.0/2.5 Flash (text + vision for receipt scanning)
 - **Storage**: Google Sheets ("keuangan v4" → "Transaksi" worksheet)
-- **API**: Express 5, Node.js, TypeScript (pnpm monorepo)
-- **DB**: PostgreSQL + Drizzle ORM (for API server)
 
 ## Where things live
 
@@ -33,15 +29,13 @@ All secrets are stored in Replit's secret store (never hardcoded):
 - `bot/sheets_manager.py` — Multi-spreadsheet manager (investasi, utang, aset, dll)
 - `bot/config.py` — Categories, accounts, keywords configuration
 - `main.py` — Entry point (adds bot/ to sys.path, runs bot)
-- `artifacts/api-server/` — Express API server
-- `artifacts/mockup-sandbox/` — Vite component preview server
 
 ## Architecture decisions
 
 - No login flow — bot is Telegram-native, user identity comes from Telegram
 - All credentials in Replit secrets, never in code
 - GOOGLE_SERVICE_ACCOUNT_JSON may have trailing commas (pasted from GCloud Console) — sheets.py cleans this automatically
-- Bot runs via `python main.py` from workspace root (not `cd bot && python bot.py`)
+- Bot runs via `python main.py` from workspace root
 
 ## User preferences
 

@@ -11,7 +11,6 @@ args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
 
 [workflows]
-runButton = "Project"
 
 [[workflows.workflow]]
 name = "Telegram Finance Bot"
@@ -66,27 +65,6 @@ PORT = "8080"
 [workflows.workflow.metadata]
 outputType = "webview"
 artifactId = "3B4_FFSkEVBkAeYMFRJ2e"
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Oliv Dashboard & API"
-
-[[workflows.workflow]]
-name = "Oliv Dashboard & API"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python dashboard_api.py"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"

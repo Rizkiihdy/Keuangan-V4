@@ -1,2 +1,0 @@
-- [Dashboard architecture](dashboard-arch.md) — Flask API port 3001 (console), Vite dashboard port 5000 (webview), proxy /api/* to Flask
-- [Port conflicts](port-conflicts.md) — Express API server already uses port 8080; Flask/dashboard must avoid it
